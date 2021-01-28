@@ -279,6 +279,12 @@ create_source_bin (guint index, gchar * uri)
   return bin;
 }
 
+static void fps_measurements_callback(GstElement  fpsdisplaysink,
+        gdouble fps, gdouble droprate, gdouble avgfps, gpointer udata)
+{
+    g_print("fps=%.1f droprate=%.2f avgfps=%.1f\n", fps, droprate, avgfps);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -370,13 +376,15 @@ main (int argc, char *argv[])
 #ifdef PLATFORM_TEGRA
   transform = gst_element_factory_make ("nvegltransform", "nvegl-transform");
 #endif
-  sink = gst_element_factory_make ("nveglglessink", "nvvideo-renderer");
-
+  GstElement *nvsink = gst_element_factory_make ("nveglglessink", "nvvideo-renderer");
+  sink = gst_element_factory_make ("fpsdisplaysink", "fps-display");
   if (!pgie || !tiler || !nvvidconv || !nvosd || !sink) {
     g_printerr ("One element could not be created. Exiting.\n");
     return -1;
   }
 
+  g_object_set (G_OBJECT(sink), "video-sink", nvsink, "text-overlay", FALSE, "signal-fps-measurements", TRUE, "fps-update-interval", 1000, "sync", FALSE, NULL);
+  g_signal_connect (sink, "fps-measurements", G_CALLBACK (fps_measurements_callback), NULL);
 #ifdef PLATFORM_TEGRA
   if(!transform) {
     g_printerr ("One tegra element could not be created. Exiting.\n");
@@ -390,7 +398,7 @@ main (int argc, char *argv[])
 
   /* Configure the nvinfer element using the nvinfer config file. */
   g_object_set (G_OBJECT (pgie),
-      "config-file-path", "dstest3_pgie_config.txt", NULL);
+      "config-file-path", "zjlab_demo_cmp_pgie_config.txt", NULL);
 
   /* Override the batch-size set in the config file with the number of sources. */
   g_object_get (G_OBJECT (pgie), "batch-size", &pgie_batch_size, NULL);
@@ -439,13 +447,13 @@ gst_bin_add_many (GST_BIN (pipeline), pgie, tiler, nvvidconv, nvosd, sink,
   /* Lets add probe to get informed of the meta data generated, we add probe to
    * the sink pad of the osd element, since by that time, the buffer would have
    * had got all the metadata. */
-  tiler_src_pad = gst_element_get_static_pad (pgie, "src");
+/*  tiler_src_pad = gst_element_get_static_pad (pgie, "src");
   if (!tiler_src_pad)
     g_print ("Unable to get src pad\n");
   else
     gst_pad_add_probe (tiler_src_pad, GST_PAD_PROBE_TYPE_BUFFER,
         tiler_src_pad_buffer_probe, NULL, NULL);
-
+*/
   /* Set the pipeline to "playing" state */
   g_print ("Now playing:");
   for (i = 0; i < num_sources; i++) {
